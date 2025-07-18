@@ -2,12 +2,17 @@
 
 use std::io::{self,BufRead,Write};
 use rand::Rng;
-use chess::{Board,ChessMove,MoveGen};
+use chess::{Board,ChessMove,MoveGen,BitBoard};
 use std::str::FromStr;
 use std::collections::BinaryHeap;
 
 mod evaluation;
 use evaluation::evaluate;
+
+mod ucigocommand;
+use ucigocommand::UCIGoCommand;
+
+
 
 use log::{debug,info,warn,error};
 
@@ -93,8 +98,7 @@ impl ChessEngine{
         let mut move_heap: BinaryHeap<EvaluatedMove> = BinaryHeap::new();
 
         for cm in moves{
-            let nb = self.board.make_move_new(cm);
-            let eval = evaluate(&nb);
+            let eval = evaluate(&self.board.make_move_new(cm));
 
             info!("move: {} evaluation: {}",cm,eval);
             let em: EvaluatedMove = EvaluatedMove::new(cm,eval);
@@ -112,20 +116,21 @@ impl ChessEngine{
         //return self.generate_random_move();
     }
 
-    fn calculate_think_time(&self, wtime: Option<i32>, btime: Option<i32>, winc: Option<i32>, binc: Option<i32>, movetime: Option<i32>, _depth: Option<i32>, infinite: Option<bool>) -> i32{
-        if let Some(movetime) = movetime{
+    fn calculate_think_time(&self, go_command: &UCIGoCommand) -> i32{
+        if let Some(movetime) = go_command.movetime{
             return movetime;
         }
         else{
-            if infinite.unwrap_or(false){
+            if go_command.infinite.unwrap_or(false){
                 return 100000000;
             }
             
-            let (my_time,my_inc) = if self.board.side_to_move() == chess::Color::White{
-                (wtime,winc)
-            }else{
-                (btime,binc)
-            };
+            let (my_time,my_inc) = 
+                if self.board.side_to_move() == chess::Color::White{
+                    (go_command.wtime,go_command.winc)
+                }else{
+                    (go_command.btime,go_command.binc)
+                };
 
             let base_time = my_time.unwrap_or(30000)/30;
             let increment = my_inc.unwrap_or(0);
@@ -141,52 +146,9 @@ impl ChessEngine{
     }
 
     fn handle_go(&self, tokens: &[&str]) {
-        let mut wtime: Option<i32> = None;
-        let mut btime: Option<i32> = None;
-        let mut winc: Option<i32> = None;
-        let mut binc: Option<i32> = None;
-        let mut movetime: Option<i32> = None;
-        let mut depth: Option<i32> = None;
-        let mut infinite: Option<bool> = None;
+        let go_command: UCIGoCommand = UCIGoCommand::new(tokens);
 
-        let mut i: usize = 1;
-
-        while i < tokens.len(){
-            match tokens[i] {
-                "wtime" if i + 1 < tokens.len() => {
-                    wtime = tokens[i + 1].parse().ok();
-                    i += 2;
-                }
-                "btime" if i + 1 < tokens.len() => {
-                    btime = tokens[i + 1].parse().ok();
-                    i += 2;
-                }
-                "winc" if i + 1 < tokens.len() => {
-                    winc = tokens[i + 1].parse().ok();
-                    i += 2;
-                }
-                "binc" if i + 1 < tokens.len() => {
-                    binc = tokens[i + 1].parse().ok();
-                    i += 2;
-                }
-                "movetime" if i + 1 < tokens.len() => {
-                    movetime = tokens[i + 1].parse().ok();
-                    i += 2;
-                }
-                "depth" if i + 1 < tokens.len() => {
-                    depth = tokens[i + 1].parse().ok();
-                    i += 2;
-                }
-                "infinite" => {
-                    infinite = Some(true);
-                    i += 1;
-                }
-                _ => i += 1,
-            }
-        }
-
-        let think_time: i32 = self.calculate_think_time(wtime, btime, winc, binc, movetime, depth, infinite);
-        //println!("Think for {}",think_time);
+        let think_time: i32 = self.calculate_think_time(&go_command);
         info!("think for {}",think_time);
         
         if let Some(best_move) = self.generate_move(think_time) {

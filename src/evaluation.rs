@@ -1,14 +1,15 @@
-use std::{cmp::Ordering, io::{self,BufRead,Write}};
-use rand::Rng;
-use chess::{Board,ChessMove,MoveGen};
-use std::str::FromStr;
-
+use std::{cmp::Ordering};
+use chess::{Board,ChessMove,BitBoard};
 use log::{debug,info,warn,error};
 
 
 
-pub fn evaluate(_cm: &Board) -> f32{
-    return 0.0;
+pub fn evaluate(board: &Board) -> f32{
+    let bb: &BitBoard = board.combined();
+    let mut set_squares = bb.popcnt() as f32;
+    set_squares = set_squares * -1.0;
+
+    return set_squares;
 }
 
 #[derive(Debug, PartialEq)] 
