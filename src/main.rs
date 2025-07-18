@@ -4,12 +4,20 @@ use std::io::{self,BufRead,Write};
 use rand::Rng;
 use chess::{Board,ChessMove,MoveGen};
 use std::str::FromStr;
+use std::collections::BinaryHeap;
+
+mod evaluation;
+use evaluation::evaluate;
 
 use log::{debug,info,warn,error};
+
+use crate::evaluation::EvaluatedMove;
 
 struct ChessEngine{
     board: Board,
 }
+
+
 
 impl ChessEngine{
     fn new() -> Self{
@@ -74,6 +82,36 @@ impl ChessEngine{
         Some(moves[random_index])
     }
 
+    fn generate_slightly_smart_move(&self) -> Option<ChessMove>{
+        let movegen = MoveGen::new_legal(&self.board);
+        let moves: Vec<ChessMove> = movegen.collect();
+        
+        if moves.is_empty() {
+            return None;
+        }
+        
+        let mut move_heap: BinaryHeap<EvaluatedMove> = BinaryHeap::new();
+
+        for cm in moves{
+            let nb = self.board.make_move_new(cm);
+            let eval = evaluate(&nb);
+
+            info!("move: {} evaluation: {}",cm,eval);
+            let em: EvaluatedMove = EvaluatedMove::new(cm,eval);
+            move_heap.push(em);
+        }
+        
+        let best_move: Option<&EvaluatedMove> = move_heap.peek();
+        
+        let extracted_best_move: Option<ChessMove> = match best_move{
+            Some(em) => Some(em.chessmove),
+            None => None
+        };
+
+        return extracted_best_move;
+        //return self.generate_random_move();
+    }
+
     fn calculate_think_time(&self, wtime: Option<i32>, btime: Option<i32>, winc: Option<i32>, binc: Option<i32>, movetime: Option<i32>, _depth: Option<i32>, infinite: Option<bool>) -> i32{
         if let Some(movetime) = movetime{
             return movetime;
@@ -96,8 +134,9 @@ impl ChessEngine{
         }
     }
 
+
     fn generate_move(&self, _think_time: i32) -> Option<ChessMove>{
-        return self.generate_random_move();
+        return self.generate_slightly_smart_move();
 
     }
 
