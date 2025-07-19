@@ -1,5 +1,5 @@
 use std::{cmp::Ordering};
-use chess::{Board,ChessMove,BitBoard};
+use chess::{BitBoard, Board, ChessMove, Color};
 use log::{debug,info,warn,error};
 
 
@@ -9,7 +9,13 @@ pub fn evaluate(board: &Board) -> f32{
     let mut set_squares = bb.popcnt() as f32;
     set_squares = set_squares * -1.0;
 
-    return set_squares;
+    let bbwhite = board.color_combined(chess::Color::White);
+    let bbblack = board.color_combined(chess::Color::Black);
+
+    let delta = (bbwhite.popcnt() as f32) - (bbblack.popcnt() as f32);
+
+    return delta;
+    
 }
 
 #[derive(Debug, PartialEq)] 
