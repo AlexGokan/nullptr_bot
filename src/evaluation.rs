@@ -5,14 +5,32 @@ use log::{debug,info,warn,error};
 
 
 pub fn evaluate(board: &Board) -> f32{
-    let bb: &BitBoard = board.combined();
-    let mut set_squares = bb.popcnt() as f32;
-    set_squares = set_squares * -1.0;
+    //returns how good a board is for white
+    let queen_val: f32 = 9.0;
+    let rook_val: f32 = 5.0;
+    let bishop_val: f32 = 3.5;
+    let knight_val: f32 = 3.0;
+    let pawn_val: f32 = 1.0;
+
 
     let bbwhite = board.color_combined(chess::Color::White);
     let bbblack = board.color_combined(chess::Color::Black);
 
-    let delta = (bbwhite.popcnt() as f32) - (bbblack.popcnt() as f32);
+    let white_val: f32 = 
+        queen_val  * (board.pieces(chess::Piece::Queen)  & bbwhite).popcnt() as f32 +
+        rook_val   * (board.pieces(chess::Piece::Rook)   & bbwhite).popcnt() as f32 +
+        bishop_val * (board.pieces(chess::Piece::Bishop) & bbwhite).popcnt() as f32 +
+        knight_val * (board.pieces(chess::Piece::Knight) & bbwhite).popcnt() as f32 +
+        pawn_val   * (board.pieces(chess::Piece::Pawn)   & bbwhite).popcnt() as f32;
+
+    let black_val: f32 = 
+        queen_val  * (board.pieces(chess::Piece::Queen)  & bbblack).popcnt() as f32 +
+        rook_val   * (board.pieces(chess::Piece::Rook)   & bbblack).popcnt() as f32 +
+        bishop_val * (board.pieces(chess::Piece::Bishop) & bbblack).popcnt() as f32 +
+        knight_val * (board.pieces(chess::Piece::Knight) & bbblack).popcnt() as f32 +
+        pawn_val   * (board.pieces(chess::Piece::Pawn)   & bbblack).popcnt() as f32;
+
+    let delta: f32 = white_val - black_val;
 
     return delta;
     

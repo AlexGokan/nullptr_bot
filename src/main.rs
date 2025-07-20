@@ -87,7 +87,7 @@ impl ChessEngine{
         Some(moves[random_index])
     }
 
-    fn generate_slightly_smart_move(&self) -> Option<ChessMove>{
+    fn generate_slightly_smart_move(&self, my_color: chess::Color) -> Option<ChessMove>{
         let movegen = MoveGen::new_legal(&self.board);
         let moves: Vec<ChessMove> = movegen.collect();
         
@@ -98,7 +98,10 @@ impl ChessEngine{
         let mut move_heap: BinaryHeap<EvaluatedMove> = BinaryHeap::new();
 
         for cm in moves{
-            let eval = evaluate(&self.board.make_move_new(cm));
+            let mut eval = evaluate(&self.board.make_move_new(cm));
+            if my_color == chess::Color::Black{
+                eval = eval * -1.0;
+            }
 
             info!("move: {} evaluation: {}",cm,eval);
             let em: EvaluatedMove = EvaluatedMove::new(cm,eval);
@@ -140,8 +143,8 @@ impl ChessEngine{
     }
 
 
-    fn generate_move(&self, _think_time: i32) -> Option<ChessMove>{
-        return self.generate_slightly_smart_move();
+    fn generate_move(&self, _think_time: i32, my_color: chess::Color) -> Option<ChessMove>{
+        return self.generate_slightly_smart_move(my_color);
 
     }
 
@@ -151,7 +154,9 @@ impl ChessEngine{
         let think_time: i32 = self.calculate_think_time(&go_command);
         info!("think for {}",think_time);
         
-        if let Some(best_move) = self.generate_move(think_time) {
+        let my_color: chess::Color = self.board.side_to_move();
+
+        if let Some(best_move) = self.generate_move(think_time, my_color) {
             println!("bestmove {}", best_move);
         } else {
             // No legal moves (checkmate or stalemate)
