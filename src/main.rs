@@ -1,8 +1,9 @@
 
 
-use std::io::{self,BufRead,Write};
+use core::f32;
+use std::{io::{self,BufRead,Write}, result};
 use rand::Rng;
-use chess::{Board,ChessMove,MoveGen,BitBoard};
+use chess::{BitBoard, Board, BoardStatus, ChessMove, MoveGen};
 use std::str::FromStr;
 use std::collections::BinaryHeap;
 
@@ -87,6 +88,67 @@ impl ChessEngine{
         Some(moves[random_index])
     }
 
+    fn evaluate_minimax(&self, board: chess::Board, depth: u16, mut alpha: f32, mut beta: f32, my_color: chess::Color, my_move: bool) -> f32{
+        if depth == 0{
+            return evaluate(&board, my_color);
+        }
+        else{
+            
+            let movegen = MoveGen::new_legal(&board);
+            let (captures, quiet_moves): (Vec<ChessMove>, Vec<ChessMove>) = movegen
+            .partition(|m| board.piece_on(m.get_dest()).is_some());
+
+            let mut moves = captures;
+            moves.extend(quiet_moves);
+            
+
+            let num_moves = moves.len();
+            info!(" ---- {num_moves} response moves");
+            if my_move{//I am a maximizing player
+                if num_moves == 0 && board.status() == BoardStatus::Stalemate{
+                    return 0.0;
+                }
+
+
+                let mut max_eval = f32::NEG_INFINITY;
+                for cm in moves{
+                    info!("depth {depth}         evaluating response {cm}");
+                    let board_copy = board.clone();
+                    let mut new_board = board.clone();
+                    board_copy.make_move(cm, &mut new_board);
+
+                    let eval = self.evaluate_minimax(new_board, depth-1, alpha, beta, my_color, !my_move);
+                    if eval >= beta{
+                        break;
+                    }
+                    alpha = alpha.max(eval);
+                    max_eval = max_eval.max(eval);
+                }
+                return max_eval;
+
+            }else{//my opponent is a minimzing player
+                if num_moves == 0 && board.status() == BoardStatus::Stalemate{
+                    return 0.0;
+                }
+                let mut min_eval = f32::INFINITY;             
+                for cm in moves{
+                    info!("depth {depth}         evaluating response {cm}");
+                    let board_copy = board.clone();
+                    let mut new_board = board.clone();
+                    board_copy.make_move(cm, &mut new_board);
+
+                    let eval = self.evaluate_minimax(new_board, depth-1, alpha, beta, my_color, !my_move);
+                    if eval <= alpha{
+                        break;
+                    }
+                    beta = beta.min(eval);
+                    min_eval = min_eval.min(eval);
+                }
+                return min_eval;
+            }
+        }
+    }
+
     fn generate_slightly_smart_move(&self, my_color: chess::Color) -> Option<ChessMove>{
         let movegen = MoveGen::new_legal(&self.board);
         let moves: Vec<ChessMove> = movegen.collect();
@@ -96,27 +158,34 @@ impl ChessEngine{
         }
         
         let mut move_heap: BinaryHeap<EvaluatedMove> = BinaryHeap::new();
-
+        
+        let num_moves = moves.len();
+        info!("evaluating {num_moves} moves at the top level");
         for cm in moves{
-            let mut eval = evaluate(&self.board.make_move_new(cm));
-            if my_color == chess::Color::Black{
-                eval = eval * -1.0;
-            }
+            info!("====================================================");
+            //let eval = evaluate(&self.board.make_move_new(cm),my_color);
+            info!("going into eval function for {cm}");
+            let nb = self.board.make_move_new(cm);
+            let mut alpha: f32 = f32::NEG_INFINITY;
+            let mut beta: f32 = f32::INFINITY;
+            let eval = self.evaluate_minimax(nb, 8, alpha,beta, my_color, false);
 
             info!("move: {} evaluation: {}",cm,eval);
             let em: EvaluatedMove = EvaluatedMove::new(cm,eval);
             move_heap.push(em);
         }
         
-        let best_move: Option<&EvaluatedMove> = move_heap.peek();
+        let best_move: Option<&EvaluatedMove> = move_heap.peek();//this is a max heap
+        //since I have ensured that the heap will always have some element in it, why do I have to return an Option?
         
+
         let extracted_best_move: Option<ChessMove> = match best_move{
             Some(em) => Some(em.chessmove),
             None => None
-        };
+        };//feels like ther should be a better way to do this?
+        //let extracted_best_move: Option<ChessMove> = move_heap.peek().map(|em| em.chessmove);
 
         return extracted_best_move;
-        //return self.generate_random_move();
     }
 
     fn calculate_think_time(&self, go_command: &UCIGoCommand) -> i32{
