@@ -88,13 +88,8 @@ impl ChessEngine{
         Some(moves[random_index])
     }
 
-    fn evaluate_minimax(&self, board: chess::Board, depth: u16, mut alpha: f32, mut beta: f32, my_color: chess::Color, my_move: bool) -> f32 {
-        const MATE_VALUE: f32 = 100000.0;  // Much larger than any position eval
-        
-        if depth == 0 {
-            return evaluate(&board, my_color);
-        }
-        
+
+    fn output_sorted_move_list(&self, board: chess::Board) -> Vec<ChessMove>{
         let movegen = MoveGen::new_legal(&board);
         
         let (captures, quiet_moves): (Vec<ChessMove>, Vec<ChessMove>) = movegen
@@ -138,9 +133,23 @@ impl ChessEngine{
         moves.extend(rook_caps);
         moves.extend(queen_caps);
         moves.extend(king_caps);
-        moves.extend(quiet_moves);
         moves.extend(other_captures);//should be empty
+        moves.extend(quiet_moves);
+
+        return moves;
+    }
+
+    fn evaluate_minimax(&self, board: chess::Board, depth: usize, mut alpha: f32, mut beta: f32, my_color: chess::Color, my_move: bool) -> f32 {
+        const MATE_VALUE: f32 = 100000.0;  // Much larger than any position eval
         
+        if depth == 0 {
+            return evaluate(&board, my_color);
+        }
+        
+
+        let moves: Vec<ChessMove> = self.output_sorted_move_list(board);
+
+
         // Handle terminal positions (checkmate/stalemate)
         if moves.is_empty() {
             return match board.status() {
@@ -155,6 +164,7 @@ impl ChessEngine{
                 _ => 0.0,
             };
         }
+
         
         if my_move {
             let mut max_eval = -MATE_VALUE;
@@ -191,15 +201,19 @@ impl ChessEngine{
         }
     }
 
-    fn generate_best_move(&self, my_color: chess::Color, depth: u16) -> Option<ChessMove> { 
+    fn generate_best_move(&self, my_color: chess::Color, depth: usize) -> Option<ChessMove> { 
         const MATE_VALUE: f32 = 1000000.0;
         
+        /*
         let movegen = MoveGen::new_legal(&self.board);
         let (captures, quiet_moves): (Vec<ChessMove>, Vec<ChessMove>) = movegen
             .partition(|m| self.board.piece_on(m.get_dest()).is_some());
 
         let mut moves = captures;
         moves.extend(quiet_moves);
+        */
+
+        let moves = self.output_sorted_move_list(self.board);
         
         if moves.is_empty() {
             return None;
@@ -238,6 +252,103 @@ impl ChessEngine{
     
     best_move
 }
+
+    fn iterative_deepening_search(&self, time_limit: u128, max_depth: usize, my_color: chess::Color) -> Option<ChessMove>{
+        
+        
+        let timer = std::time::Instant::now();
+
+        let mut best_move: Option<ChessMove> = None;
+        let mut prev_best_move: Option<ChessMove> = None;
+
+        let mut best_score: f32 = f32::NEG_INFINITY;
+        
+        const MATE_VALUE: f32 = 100000.0;
+
+        for depth in 2..max_depth{
+            info!("=============================================");
+            let mut elapsed_time = timer.elapsed().as_millis();
+            if elapsed_time >= time_limit{
+                break;
+            }else{
+                info!("we have enough time!");
+            }
+
+            let mut moves = self.output_sorted_move_list(self.board);
+            let num_moves = moves.len();
+            info!("{num_moves} moves");
+            
+
+            
+            match prev_best_move{//prepend previous best move to list if it exists
+                Some(cm) => {
+                    moves.retain(|&m| m!= cm);
+                    moves.insert(0, cm);
+
+                }
+                None =>{}
+            }
+            
+
+            let num_moves = moves.len();
+            info!("after prepending we have {num_moves} elements");
+
+
+            let mut curr_best_move: Option<ChessMove> = None;
+            let mut curr_best_score: f32 = f32::NEG_INFINITY;
+            let mut alpha: f32 = -MATE_VALUE;
+            let mut beta: f32 = MATE_VALUE;
+
+            let mut finished_this_depth = true;
+
+            for chess_move in moves{
+                elapsed_time = timer.elapsed().as_millis();
+                info!("----Elapsed {elapsed_time}");
+                
+                if (time_limit - elapsed_time) < 250{//give it 250 milliseconds to break instead of a percentage
+                //if (elapsed_time as f32) >= (time_limit as f32) * 0.90{
+                    info!("breaking");
+                    finished_this_depth = false;
+                    break;
+                }
+                
+
+                let board_copy = self.board.clone();//make the move onto a new board
+                let mut new_board = self.board.clone();
+                board_copy.make_move(chess_move, &mut new_board);
+
+                //let score = -1.0 * self.evaluate_minimax(new_board, depth-1, -beta, -alpha, my_color, false);
+                let score = self.evaluate_minimax(new_board, depth - 1, alpha, beta, my_color, false);
+
+                info!("{chess_move} : {score}");
+
+                if score > curr_best_score{
+                    curr_best_score = score;
+                    curr_best_move = Some(chess_move);
+                }
+
+                alpha = alpha.max(score);
+                if alpha >= beta{
+                    break;
+                }
+            }
+
+            if finished_this_depth{
+                match curr_best_move{
+                    Some(curr_best_move_cm) => {
+                        best_move = curr_best_move;
+                        best_score = curr_best_score;
+                        prev_best_move = curr_best_move;
+                    }
+                    None => {}
+                }
+            }
+
+        }
+
+        return best_move;
+
+    }
 
     fn generate_slightly_smart_move(&self, my_color: chess::Color) -> Option<ChessMove>{
         let movegen = MoveGen::new_legal(&self.board);
@@ -303,7 +414,9 @@ impl ChessEngine{
 
 
     fn generate_move(&self, _think_time: i32, my_color: chess::Color) -> Option<ChessMove>{
-        return self.generate_best_move(my_color,8);
+        
+        return self.iterative_deepening_search(_think_time as u128, 12, my_color)
+       // return self.generate_best_move(my_color,8);
 
     }
 

@@ -1,5 +1,5 @@
 use std::{cmp::Ordering, str::FromStr};
-use chess::{get_rank, BitBoard, Board, BoardStatus, ChessMove, Color};
+use chess::{get_rank, BitBoard, Board, BoardStatus, ChessMove, Color, MoveGen};
 use log::{debug,info,warn,error};
 
 pub fn forward_pos(row: usize, color: chess::Color) -> usize{
@@ -20,7 +20,7 @@ pub fn evaluate_for_color(board: &Board, color: chess::Color) -> f32{
 
     //increase pawn value the further up the board it is
     let mut pawn_sum: f32 = 0.0;
-    let base_val: f32 = 1.15;
+    let base_val: f32 = 1.20;
     if color == chess::Color::White{
         for row in 0..8{
             let bb_row = get_rank(chess::Rank::from_index(row)) & bb_my_color;
@@ -60,8 +60,11 @@ pub fn evaluate_for_color(board: &Board, color: chess::Color) -> f32{
     let outer_control_score = (bb_center_outer_ring & bb_my_color).popcnt();
 
     let control_score: f32 = ((inner_control_score as f32) * 0.4) + ((outer_control_score as f32) * 0.2);
-       
-    //return piece_val;
+    
+    //let move_count = MoveGen::new_legal(&board).count();
+    //let flexibility_score = (move_count as f32) * 0.25;
+    
+    
     return piece_val + control_score;
 }
 
