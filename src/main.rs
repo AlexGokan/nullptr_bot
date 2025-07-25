@@ -88,66 +88,156 @@ impl ChessEngine{
         Some(moves[random_index])
     }
 
-    fn evaluate_minimax(&self, board: chess::Board, depth: u16, mut alpha: f32, mut beta: f32, my_color: chess::Color, my_move: bool) -> f32{
-        if depth == 0{
+    fn evaluate_minimax(&self, board: chess::Board, depth: u16, mut alpha: f32, mut beta: f32, my_color: chess::Color, my_move: bool) -> f32 {
+        const MATE_VALUE: f32 = 100000.0;  // Much larger than any position eval
+        
+        if depth == 0 {
             return evaluate(&board, my_color);
         }
-        else{
-            
-            let movegen = MoveGen::new_legal(&board);
-            let (captures, quiet_moves): (Vec<ChessMove>, Vec<ChessMove>) = movegen
+        
+        let movegen = MoveGen::new_legal(&board);
+        
+        let (captures, quiet_moves): (Vec<ChessMove>, Vec<ChessMove>) = movegen
             .partition(|m| board.piece_on(m.get_dest()).is_some());
 
-            let mut moves = captures;
-            moves.extend(quiet_moves);
-            
+        let (pawn_caps,other_captures): (Vec<ChessMove>, Vec<ChessMove>) = 
+            captures.iter().partition(|m| {
+                board.piece_on(m.get_source()).expect("there should always be a piece at the source of a move") == chess::Piece::Pawn
+            });
 
-            let num_moves = moves.len();
-            info!(" ---- {num_moves} response moves");
-            if my_move{//I am a maximizing player
-                if num_moves == 0 && board.status() == BoardStatus::Stalemate{
-                    return 0.0;
-                }
+        let (knight_caps,other_captures): (Vec<ChessMove>, Vec<ChessMove>) = 
+            other_captures.iter().partition(|m| {
+                board.piece_on(m.get_source()).expect("there should always be a piece at the source of a move") == chess::Piece::Knight
+            });
 
+        let (bishop_caps,other_captures): (Vec<ChessMove>, Vec<ChessMove>) = 
+            other_captures.iter().partition(|m| {
+                board.piece_on(m.get_source()).expect("there should always be a piece at the source of a move") == chess::Piece::Bishop
+            });
 
-                let mut max_eval = f32::NEG_INFINITY;
-                for cm in moves{
-                    info!("depth {depth}         evaluating response {cm}");
-                    let board_copy = board.clone();
-                    let mut new_board = board.clone();
-                    board_copy.make_move(cm, &mut new_board);
+        let (rook_caps,other_captures): (Vec<ChessMove>, Vec<ChessMove>) = 
+            other_captures.iter().partition(|m| {
+                board.piece_on(m.get_source()).expect("there should always be a piece at the source of a move") == chess::Piece::Rook
+            });
 
-                    let eval = self.evaluate_minimax(new_board, depth-1, alpha, beta, my_color, !my_move);
-                    if eval >= beta{
-                        break;
+        let (queen_caps,other_captures): (Vec<ChessMove>, Vec<ChessMove>) = 
+            other_captures.iter().partition(|m| {
+                board.piece_on(m.get_source()).expect("there should always be a piece at the source of a move") == chess::Piece::Queen
+            });
+
+        let (king_caps,other_captures): (Vec<ChessMove>, Vec<ChessMove>) = 
+            other_captures.iter().partition(|m| {
+                board.piece_on(m.get_source()).expect("there should always be a piece at the source of a move") == chess::Piece::King
+            });
+        
+
+        let mut moves: Vec<ChessMove> = Vec::<ChessMove>::new();
+        moves.extend(pawn_caps);
+        moves.extend(knight_caps);
+        moves.extend(bishop_caps);
+        moves.extend(rook_caps);
+        moves.extend(queen_caps);
+        moves.extend(king_caps);
+        moves.extend(quiet_moves);
+        moves.extend(other_captures);//should be empty
+        
+        // Handle terminal positions (checkmate/stalemate)
+        if moves.is_empty() {
+            return match board.status() {
+                BoardStatus::Stalemate => 0.0,
+                BoardStatus::Checkmate => {
+                    if board.side_to_move() == my_color {
+                        -MATE_VALUE - (depth as f32)  // We're in checkmate - bad, but prefer later mates
+                    } else {
+                        MATE_VALUE + (depth as f32)   // Opponent in checkmate - good, prefer faster mates
                     }
-                    alpha = alpha.max(eval);
-                    max_eval = max_eval.max(eval);
                 }
-                return max_eval;
-
-            }else{//my opponent is a minimzing player
-                if num_moves == 0 && board.status() == BoardStatus::Stalemate{
-                    return 0.0;
+                _ => 0.0,
+            };
+        }
+        
+        if my_move {
+            let mut max_eval = -MATE_VALUE;
+            for chess_move in moves {
+                let board_copy = board.clone();
+                let mut new_board = board.clone();
+                board_copy.make_move(chess_move, &mut new_board);
+                let eval = self.evaluate_minimax(new_board, depth - 1, alpha, beta, my_color, false);
+                
+                max_eval = max_eval.max(eval);
+                alpha = alpha.max(eval);
+                
+                if beta <= alpha {
+                    break; // Alpha-beta pruning
                 }
-                let mut min_eval = f32::INFINITY;             
-                for cm in moves{
-                    info!("depth {depth}         evaluating response {cm}");
-                    let board_copy = board.clone();
-                    let mut new_board = board.clone();
-                    board_copy.make_move(cm, &mut new_board);
-
-                    let eval = self.evaluate_minimax(new_board, depth-1, alpha, beta, my_color, !my_move);
-                    if eval <= alpha{
-                        break;
-                    }
-                    beta = beta.min(eval);
-                    min_eval = min_eval.min(eval);
-                }
-                return min_eval;
             }
+            max_eval
+        } else {
+            let mut min_eval = MATE_VALUE;
+            for chess_move in moves {
+                let board_copy = board.clone();
+                let mut new_board = board.clone();
+                board_copy.make_move(chess_move, &mut new_board);
+                let eval = self.evaluate_minimax(new_board, depth - 1, alpha, beta, my_color, true);
+                
+                min_eval = min_eval.min(eval);
+                beta = beta.min(eval);
+                
+                if beta <= alpha {
+                    break; // Alpha-beta pruning
+                }
+            }
+            min_eval
         }
     }
+
+    fn generate_best_move(&self, my_color: chess::Color, depth: u16) -> Option<ChessMove> { 
+        const MATE_VALUE: f32 = 1000000.0;
+        
+        let movegen = MoveGen::new_legal(&self.board);
+        let (captures, quiet_moves): (Vec<ChessMove>, Vec<ChessMove>) = movegen
+            .partition(|m| self.board.piece_on(m.get_dest()).is_some());
+
+        let mut moves = captures;
+        moves.extend(quiet_moves);
+        
+        if moves.is_empty() {
+            return None;
+        }
+        
+        let mut best_move = None;
+        let mut best_eval = -MATE_VALUE;
+        let mut alpha = -MATE_VALUE;
+        let beta = MATE_VALUE;
+        
+        info!("evaluating {} moves at the top level", moves.len());
+        
+        for chess_move in moves {
+            info!("====================================================");
+            info!("going into eval function for {}", chess_move);
+            
+            let board_copy = self.board.clone();
+            let mut new_board = self.board.clone();
+            board_copy.make_move(chess_move, &mut new_board);
+            let eval = self.evaluate_minimax(new_board, depth - 1, alpha, beta, my_color, false);
+            
+            info!("move: {} evaluation: {}", chess_move, eval);
+            
+            if eval > best_eval {
+                best_eval = eval;
+                best_move = Some(chess_move);
+            }
+            
+            alpha = alpha.max(eval);
+            
+            // Alpha-beta pruning at root level (though less useful here)
+            if beta <= alpha {
+                break;
+            }
+        }
+    
+    best_move
+}
 
     fn generate_slightly_smart_move(&self, my_color: chess::Color) -> Option<ChessMove>{
         let movegen = MoveGen::new_legal(&self.board);
@@ -213,17 +303,24 @@ impl ChessEngine{
 
 
     fn generate_move(&self, _think_time: i32, my_color: chess::Color) -> Option<ChessMove>{
-        return self.generate_slightly_smart_move(my_color);
+        return self.generate_best_move(my_color,8);
 
     }
 
     fn handle_go(&self, tokens: &[&str]) {
+
+        
         let go_command: UCIGoCommand = UCIGoCommand::new(tokens);
 
         let think_time: i32 = self.calculate_think_time(&go_command);
         info!("think for {}",think_time);
         
         let my_color: chess::Color = self.board.side_to_move();
+
+        //let eval = evaluate(&self.board, my_color);
+        //info!("Eval: {eval}");
+        
+        //std::process::exit(0);
 
         if let Some(best_move) = self.generate_move(think_time, my_color) {
             println!("bestmove {}", best_move);
