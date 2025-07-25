@@ -3,7 +3,7 @@
 use core::f32;
 use std::{io::{self,BufRead,Write}, result};
 use rand::Rng;
-use chess::{BitBoard, Board, BoardStatus, ChessMove, MoveGen};
+use chess::{BitBoard, Board, BoardStatus, ChessMove, MoveGen, NUM_PIECES};
 use std::str::FromStr;
 use std::collections::BinaryHeap;
 
@@ -389,10 +389,16 @@ impl ChessEngine{
         return extracted_best_move;
     }
 
-    fn calculate_think_time(&self, go_command: &UCIGoCommand) -> i32{
+    fn calculate_think_time_ms(&self, go_command: &UCIGoCommand, my_color: chess::Color) -> i32{
+        //go command is in ms
+        
+        
         if let Some(movetime) = go_command.movetime{
+            warn!("Received a UCI go command with movetime of {movetime}");
             return movetime;
         }
+        
+
         else{
             if go_command.infinite.unwrap_or(false){
                 return 100000000;
@@ -405,37 +411,50 @@ impl ChessEngine{
                     (go_command.btime,go_command.binc)
                 };
 
-            let base_time = my_time.unwrap_or(30000)/30;
-            let increment = my_inc.unwrap_or(0);
+            let base_time = my_time.unwrap_or(30000);
+            let increment = my_inc.unwrap_or(0);  
 
-            return base_time + increment;
+            println!("time remain: {base_time} {increment}");      
+           
+            let num_my_pcs = self.board.color_combined(my_color).popcnt();
+            let num_opp_pcs = self.board.color_combined(!my_color).popcnt();
+            let total_num_pcs = num_my_pcs + num_opp_pcs;
+
+            if total_num_pcs == 32{
+                return 5;
+            }
+
+
+
+
+            return ((base_time as f32)/30.0) as i32 + increment;
         }
     }
 
 
-    fn generate_move(&self, _think_time: i32, my_color: chess::Color) -> Option<ChessMove>{
+    fn generate_move(&self, _think_time_ms: i32, my_color: chess::Color) -> Option<ChessMove>{
         
-        return self.iterative_deepening_search(_think_time as u128, 12, my_color)
+        return self.iterative_deepening_search(_think_time_ms as u128, 12, my_color)
        // return self.generate_best_move(my_color,8);
 
     }
 
     fn handle_go(&self, tokens: &[&str]) {
 
-        
+        let my_color: chess::Color = self.board.side_to_move();
         let go_command: UCIGoCommand = UCIGoCommand::new(tokens);
 
-        let think_time: i32 = self.calculate_think_time(&go_command);
-        info!("think for {}",think_time);
+        let think_time_ms: i32 = self.calculate_think_time_ms(&go_command, my_color);
+        info!("think for {} ms",think_time_ms);
         
-        let my_color: chess::Color = self.board.side_to_move();
+        
 
         //let eval = evaluate(&self.board, my_color);
         //info!("Eval: {eval}");
         
         //std::process::exit(0);
 
-        if let Some(best_move) = self.generate_move(think_time, my_color) {
+        if let Some(best_move) = self.generate_move(think_time_ms, my_color) {
             println!("bestmove {}", best_move);
         } else {
             // No legal moves (checkmate or stalemate)
