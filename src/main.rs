@@ -265,13 +265,13 @@ impl ChessEngine{
         
         const MATE_VALUE: f32 = 100000.0;
 
-        for depth in 2..max_depth{
+        'depth_loop: for depth in 1..max_depth{
             info!("=============================================");
             let mut elapsed_time = timer.elapsed().as_millis();
             if elapsed_time >= time_limit{
-                break;
+                break 'depth_loop;
             }else{
-                info!("we have enough time!");
+                info!("Depth {depth}: we have enough time!");
             }
 
             let mut moves = self.output_sorted_move_list(self.board);
@@ -279,7 +279,6 @@ impl ChessEngine{
             info!("{num_moves} moves");
             
 
-            
             match prev_best_move{//prepend previous best move to list if it exists
                 Some(cm) => {
                     moves.retain(|&m| m!= cm);
@@ -301,15 +300,14 @@ impl ChessEngine{
 
             let mut finished_this_depth = true;
 
-            for chess_move in moves{
+            'move_loop: for chess_move in moves{
                 elapsed_time = timer.elapsed().as_millis();
                 info!("----Elapsed {elapsed_time}");
                 
-                if (time_limit - elapsed_time) < 250{//give it 250 milliseconds to break instead of a percentage
-                //if (elapsed_time as f32) >= (time_limit as f32) * 0.90{
+                if elapsed_time >= time_limit{
                     info!("breaking");
                     finished_this_depth = false;
-                    break;
+                    break 'depth_loop;
                 }
                 
 
@@ -329,7 +327,7 @@ impl ChessEngine{
 
                 alpha = alpha.max(score);
                 if alpha >= beta{
-                    break;
+                    break 'move_loop;
                 }
             }
 
@@ -390,15 +388,10 @@ impl ChessEngine{
     }
 
     fn calculate_think_time_ms(&self, go_command: &UCIGoCommand, my_color: chess::Color) -> i32{
-        //go command is in ms
-        
-        
+        //go command is in ms        
         if let Some(movetime) = go_command.movetime{
-            warn!("Received a UCI go command with movetime of {movetime}");
             return movetime;
         }
-        
-
         else{
             if go_command.infinite.unwrap_or(false){
                 return 100000000;
@@ -414,26 +407,26 @@ impl ChessEngine{
             let base_time = my_time.unwrap_or(30000);
             let increment = my_inc.unwrap_or(0);  
 
-            println!("time remain: {base_time} {increment}");      
            
             let num_my_pcs = self.board.color_combined(my_color).popcnt();
             let num_opp_pcs = self.board.color_combined(!my_color).popcnt();
             let total_num_pcs = num_my_pcs + num_opp_pcs;
 
+            
             if total_num_pcs == 32{
-                return 5;
+                return 2000;//2 seconds
             }
+            
 
 
 
-
+            //return 500;
             return ((base_time as f32)/30.0) as i32 + increment;
         }
     }
 
 
-    fn generate_move(&self, _think_time_ms: i32, my_color: chess::Color) -> Option<ChessMove>{
-        
+    fn generate_move(&self, _think_time_ms: i32, my_color: chess::Color) -> Option<ChessMove>{ 
         return self.iterative_deepening_search(_think_time_ms as u128, 12, my_color)
        // return self.generate_best_move(my_color,8);
 
@@ -446,7 +439,6 @@ impl ChessEngine{
 
         let think_time_ms: i32 = self.calculate_think_time_ms(&go_command, my_color);
         info!("think for {} ms",think_time_ms);
-        
         
 
         //let eval = evaluate(&self.board, my_color);
