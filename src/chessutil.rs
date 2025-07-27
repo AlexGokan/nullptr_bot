@@ -1,7 +1,7 @@
 use chess::{ChessMove, MoveGen};
 
 
-pub fn output_sorted_move_list(board: chess::Board) -> Vec<ChessMove>{
+pub fn output_sorted_move_list(board: &chess::Board) -> Vec<ChessMove>{
     let movegen = MoveGen::new_legal(&board);
     
     let (captures, quiet_moves): (Vec<ChessMove>, Vec<ChessMove>) = movegen

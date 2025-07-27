@@ -71,7 +71,7 @@ pub fn piece_square_table_evaluate(board: &Board, color: chess::Color) -> f32{
     -10,  5,  5,  5,  5,  5,  0,-10,
     -10,  0,  5,  0,  0,  0,  0,-10,
     -20,-10,-10, -5, -5,-10,-10,-20
-    ];//moving these outside the function to static storage does nothing
+    ];//moving these outside the function to static storage does nothing optimization wise
     
     //info!("evaluating with piece square tables");
     
@@ -90,10 +90,10 @@ pub fn piece_square_table_evaluate(board: &Board, color: chess::Color) -> f32{
         }
         
         let pawn_bit_value = get_bit(bb_my_pawns,idx);//looking upwards from white's perspective
-        let knight_bit_value = get_bit(bb_my_knights,idx);//looking upwards from white's perspective
-        let bishop_bit_value = get_bit(bb_my_bishops,idx);//looking upwards from white's perspective
-        let rook_bit_value = get_bit(bb_my_rooks,idx);//looking upwards from white's perspective
-        let queen_bit_value = get_bit(bb_my_queens,idx);//looking upwards from white's perspective
+        let knight_bit_value = get_bit(bb_my_knights,idx);
+        let bishop_bit_value = get_bit(bb_my_bishops,idx);
+        let rook_bit_value = get_bit(bb_my_rooks,idx);
+        let queen_bit_value = get_bit(bb_my_queens,idx);
         
         let col = nominal_idx%8;
         let row = (nominal_idx-col)/8;//will range from 0-7
@@ -107,16 +107,16 @@ pub fn piece_square_table_evaluate(board: &Board, color: chess::Color) -> f32{
         let queen_table_value = PST_QUEEN[new_idx];
 
         pst_score += 
-            (pawn_table_value as i32) * (pawn_bit_value as i32);
-            (knight_table_value as i32) * (knight_bit_value as i32);
-            (bishop_table_value as i32) * (bishop_bit_value as i32);
-            (rook_table_value as i32) * (rook_bit_value as i32);
-            (queen_table_value as i32) * (queen_bit_value as i32);
+            pawn_table_value * (pawn_bit_value as i32);
+            knight_table_value * (knight_bit_value as i32);
+            bishop_table_value * (bishop_bit_value as i32);
+            rook_table_value * (rook_bit_value as i32);
+            queen_table_value * (queen_bit_value as i32);
     }
 
     //info!("my total evaluation: {pst_score}");
 
-    let egp =early_game_probability(board);
+    let egp = early_game_probability(board);
     let pst_weight = 1.0 - egp;
     //info!("early game prob: {egp}");
     //info!("PST weight: {pst_weight}");
@@ -199,12 +199,6 @@ pub fn evaluate_for_color(board: &Board, color: chess::Color) -> f32{
 
 pub fn evaluate(board: &Board, perspective: chess::Color) -> f32{
     //returns how good a board is from the perspective of a certain player
-    /*
-    if board.status() == BoardStatus::Stalemate{
-        info!("stalemate");
-        return 0.0;
-    }
-    */
     
     let eval_me: f32 = evaluate_for_color(board, perspective);
     let eval_opp: f32 = evaluate_for_color(board, !perspective);
@@ -212,33 +206,3 @@ pub fn evaluate(board: &Board, perspective: chess::Color) -> f32{
     return eval_me - eval_opp;
     
 }
-
-#[derive(Debug, PartialEq)] 
-pub struct EvaluatedMove{
-    pub evaluation: f32,
-    pub chessmove: ChessMove
-}
-
-impl EvaluatedMove{
-    pub fn new(m: ChessMove, eval: f32) -> Self{
-        EvaluatedMove{
-            evaluation: eval,
-            chessmove: m
-        }
-    }
-}
-
-impl Ord for EvaluatedMove {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.evaluation.partial_cmp(&other.evaluation)
-            .unwrap_or(Ordering::Equal)
-    }
-}
-
-impl PartialOrd for EvaluatedMove {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Eq for EvaluatedMove {}  // Required for Ord

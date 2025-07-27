@@ -20,7 +20,6 @@ mod chessutil;
 
 use log::{debug,info,warn,error};
 
-use crate::evaluation::EvaluatedMove;
 
 pub struct ChessEngine{
     nodes_visited: u64,
@@ -58,14 +57,17 @@ impl ChessEngine{
     fn handle_searchbenchmark(&mut self, tokens: &[&str]){
         self.nodes_visited = 0;
         
-        let think_time: u128 = 1000000;
+        let think_time: u32 = 1000000;
         let timer = std::time::Instant::now();
 
         let my_color = self.board.side_to_move();
 
         let search_depth = tokens[1].parse().unwrap();
 
-        let best_move = self.iterative_deepening_search(think_time, search_depth, my_color);
+        //let (eval,best_move) = search::iterative_deepening_search(think_time, search_depth, my_color);
+        let (eval,chessmove) = search::iterative_deepening_search(
+            self, self.board, search_depth, think_time, self.board.side_to_move(), true);
+        
         let elapsed = timer.elapsed().as_millis();
 
         println!("Bechmark for depth: {search_depth}");
@@ -130,6 +132,7 @@ impl ChessEngine{
         }
     }
 
+    /*
     fn generate_random_move(&self) -> Option<ChessMove> {
         let movegen = MoveGen::new_legal(&self.board);
         let moves: Vec<ChessMove> = movegen.collect();
@@ -153,7 +156,7 @@ impl ChessEngine{
         }
         
 
-        let moves: Vec<ChessMove> = chessutil::output_sorted_move_list(board);
+        let moves: Vec<ChessMove> = chessutil::output_sorted_move_list(&board);
 
 
         // Handle terminal positions (checkmate/stalemate)
@@ -219,7 +222,7 @@ impl ChessEngine{
         moves.extend(quiet_moves);
         */
 
-        let moves = chessutil::output_sorted_move_list(self.board);
+        let moves = chessutil::output_sorted_move_list(&self.board);
         
         if moves.is_empty() {
             return None;
@@ -280,7 +283,7 @@ impl ChessEngine{
                 info!("Depth {depth}: we have enough time!");
             }
 
-            let mut moves = chessutil::output_sorted_move_list(self.board);
+            let mut moves = chessutil::output_sorted_move_list(&self.board);
             let num_moves = moves.len();
             info!("{num_moves} moves");
             
@@ -354,41 +357,7 @@ impl ChessEngine{
 
     }
 
-    fn iterative_deepening_with_flexible_time(&self, base_time: u128, hard_time_limit: u128, max_depth: usize, my_color: chess::Color) ->Option<ChessMove>{
-        let timer = std::time::Instant::now();
-        let difficulty_mult: f32 = 1.0;
-        
-        /*
-        bestmove = None
-        bestscore = -INF
-        prev_best_move= None
-        score_history = []
-
-        for depth in 1..maxdepth[depth loop]
-            time_spent = timer.duration
-            if time_spent > hard_time_limit
-                break depth loop
-
-            current_score = search(position, depth, -INF, +INF)
-            
-            //-----difficulty assessment----
-            //best move instability
-
-            //score instability
-
-            //close alternatives
-
-            //other tactical indicators
-
-            //Time per depth analysis
-
-            //-------update parameters for next run
-
-        
-         */
-
-        return None;
-    }
+    */
 
     fn calculate_think_time_ms(&mut self, go_command: &UCIGoCommand, my_color: chess::Color) -> i32{
         //go command is in ms        
