@@ -3,7 +3,7 @@
 use core::f32;
 use std::{io::{self,BufRead,Write}, result};
 use rand::Rng;
-use chess::{BitBoard, Board, BoardStatus, ChessMove, MoveGen, NUM_PIECES};
+use chess::{BitBoard, Board, BoardStatus, ChessMove, MoveGen, Rank, NUM_PIECES};
 use std::str::FromStr;
 use std::collections::BinaryHeap;
 
@@ -24,24 +24,69 @@ struct ChessEngine{
 }
 
 
+pub fn early_game_probability(board: &Board) -> f32{
+    let startpos_w = chess::get_rank(Rank::First) | chess::get_rank(Rank::Second);
+    let startpos_b = chess::get_rank(Rank::Seventh) | chess::get_rank(Rank::Eighth);
+
+    let bb_start_pawns_w = startpos_w & board.pieces(chess::Piece::Pawn) & board.color_combined(chess::Color::White);
+    let bb_start_pawns_b = startpos_b & board.pieces(chess::Piece::Pawn) & board.color_combined(chess::Color::Black);
+
+    let num_pcs_in_start = (bb_start_pawns_w.popcnt() + bb_start_pawns_b.popcnt()) as f32;
+    info!("{num_pcs_in_start} pieces in start");
+
+    //when num_pcs is 16, it should be about 1
+    //when num_pcs is < 13 or so, it should be about 0
+
+    let denom = 1.0+2.0_f32.powf(2.0*(num_pcs_in_start-10.0));
+    let prob = (-1.0/denom) + 1.0;
+
+    return prob as f32
+}
 
 impl ChessEngine{
     fn new() -> Self{
         ChessEngine { 
-            board: Board::default()
+            board: Board::default(),
         }
     }
 
+    fn handle_searchbenchmark(&self, tokens: &[&str]){
+        let think_time: u128 = 1000000;
+        let timer = std::time::Instant::now();
+
+        let my_color = self.board.side_to_move();
+
+        let search_depth = tokens[1].parse().unwrap();
+
+        let best_move = self.iterative_deepening_search(think_time, search_depth, my_color);
+        let elapsed = timer.elapsed().as_millis();
+
+        println!("Bechmark for depth: {search_depth}");
+        println!("{elapsed} ms");
+        io::stdout().flush().unwrap();
+
+    }
+
+    fn handle_evaluate(&self){
+        let c = self.board.side_to_move();
+        let eval = evaluate(&self.board, c);
+        println!("Evaluation: {eval}");
+        io::stdout().flush().unwrap();
+
+    }
+    
     fn handle_uci(&self){
         println!("id name nullptrbot");
         println!("id author alex");
         println!("uciok");
         io::stdout().flush().unwrap();
+
     }
 
     fn handle_isready(&self){
         println!("readyok");
         io::stdout().flush().unwrap();
+        
     }
 
     fn handle_position(&mut self, tokens: &[&str]){
@@ -408,20 +453,18 @@ impl ChessEngine{
             let increment = my_inc.unwrap_or(0);  
 
            
-            let num_my_pcs = self.board.color_combined(my_color).popcnt();
-            let num_opp_pcs = self.board.color_combined(!my_color).popcnt();
-            let total_num_pcs = num_my_pcs + num_opp_pcs;
+            let egp = early_game_probability(&self.board);
 
-            
-            if total_num_pcs == 32{
-                return 2000;//2 seconds
+            let proportion_of_game = 1.0/20.0;
+            let time_value = ((base_time as f32)*proportion_of_game) as i32 + (increment/2);
+
+            if egp > 0.5{
+                let mut quick_time = increment + 1500;
+                quick_time = quick_time.min(3000);
+                return quick_time.min(time_value);//use min(3,inc+1.5) seconds, but less if we are in blitz
             }
             
-
-
-
-            //return 500;
-            return ((base_time as f32)/30.0) as i32 + increment;
+            return time_value;
         }
     }
 
@@ -440,11 +483,14 @@ impl ChessEngine{
         let think_time_ms: i32 = self.calculate_think_time_ms(&go_command, my_color);
         info!("think for {} ms",think_time_ms);
         
-
-        //let eval = evaluate(&self.board, my_color);
-        //info!("Eval: {eval}");
+        /*
+        //----for evaluating eval function below-------
+        let eval = evaluate(&self.board, my_color);
+        info!("Eval: {eval}");
         
-        //std::process::exit(0);
+        std::process::exit(0);
+        //-------end eval evaluation
+        */
 
         if let Some(best_move) = self.generate_move(think_time_ms, my_color) {
             println!("bestmove {}", best_move);
@@ -474,6 +520,8 @@ impl ChessEngine{
                 "isready" => self.handle_isready(),
                 "position" => self.handle_position(&tokens),
                 "go" => self.handle_go(&tokens),
+                "searchbenchmark" => self.handle_searchbenchmark(&tokens),
+                "evaluate" => self.handle_evaluate(),
                 "quit" => break,
                 _ => {} // Ignore unknown commands
             }
