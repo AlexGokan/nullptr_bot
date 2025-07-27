@@ -7,7 +7,7 @@ use crate::{chessutil, evaluation::evaluate, ChessEngine};
 use log::{debug,info,warn,error};
 
 
-pub fn search_alpha_beta(engine: &ChessEngine, board: chess::Board, depth: usize, mut alpha: f32, mut beta: f32, 
+pub fn search_alpha_beta(engine: &mut ChessEngine, board: chess::Board, depth: usize, mut alpha: f32, mut beta: f32, 
                         my_color: chess::Color, my_move: bool, movelist: Option<Vec<ChessMove>>,
                         timer: Option<&std::time::Instant>, time_limit: u128
                         )
@@ -19,6 +19,7 @@ pub fn search_alpha_beta(engine: &ChessEngine, board: chess::Board, depth: usize
 
     if depth == 0{
         let eval = evaluate(&board, my_color);
+        engine.nodes_visited += 1;
         return (eval,None);
     }
 
@@ -125,7 +126,7 @@ pub fn search_alpha_beta(engine: &ChessEngine, board: chess::Board, depth: usize
     }
 }
 
-pub fn iterative_deepening_search(engine: &ChessEngine, board: chess::Board, max_depth: usize, time_limit: u128, my_color: chess::Color, my_move: bool) -> (f32, Option<ChessMove>){
+pub fn iterative_deepening_search(engine: &mut ChessEngine, board: chess::Board, max_depth: usize, time_limit: u128, my_color: chess::Color, my_move: bool) -> (f32, Option<ChessMove>){
     const MATE_VALUE: f32 = 100000.0;
     
     let timer = std::time::Instant::now();

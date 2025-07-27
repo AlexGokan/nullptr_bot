@@ -23,6 +23,7 @@ use log::{debug,info,warn,error};
 use crate::evaluation::EvaluatedMove;
 
 pub struct ChessEngine{
+    nodes_visited: u64,
     board: Board,
 }
 
@@ -50,10 +51,13 @@ impl ChessEngine{
     fn new() -> Self{
         ChessEngine { 
             board: Board::default(),
+            nodes_visited: 0
         }
     }
 
-    fn handle_searchbenchmark(&self, tokens: &[&str]){
+    fn handle_searchbenchmark(&mut self, tokens: &[&str]){
+        self.nodes_visited = 0;
+        
         let think_time: u128 = 1000000;
         let timer = std::time::Instant::now();
 
@@ -66,11 +70,14 @@ impl ChessEngine{
 
         println!("Bechmark for depth: {search_depth}");
         println!("{elapsed} ms");
+
+        let visited = self.nodes_visited;
+        println!("Evaluated {visited} leafs");
         io::stdout().flush().unwrap();
 
     }
 
-    fn handle_evaluate(&self){
+    fn handle_evaluate(&mut self){
         let c = self.board.side_to_move();
         let eval = evaluate(&self.board, c);
         println!("Evaluation: {eval}");
@@ -78,7 +85,7 @@ impl ChessEngine{
 
     }
     
-    fn handle_uci(&self){
+    fn handle_uci(&mut self){
         println!("id name nullptrbot");
         println!("id author alex");
         println!("uciok");
@@ -86,7 +93,7 @@ impl ChessEngine{
 
     }
 
-    fn handle_isready(&self){
+    fn handle_isready(&mut self){
         println!("readyok");
         io::stdout().flush().unwrap();
         
@@ -137,10 +144,11 @@ impl ChessEngine{
     }
 
 
-    fn evaluate_minimax(&self, board: chess::Board, depth: usize, mut alpha: f32, mut beta: f32, my_color: chess::Color, my_move: bool) -> f32 {
+    fn evaluate_minimax(&mut self, board: chess::Board, depth: usize, mut alpha: f32, mut beta: f32, my_color: chess::Color, my_move: bool) -> f32 {
         const MATE_VALUE: f32 = 100000.0;  // Much larger than any position eval
         
         if depth == 0 {
+            self.nodes_visited += 1;
             return evaluate(&board, my_color);
         }
         
@@ -199,7 +207,7 @@ impl ChessEngine{
         }
     }
 
-    fn generate_best_move(&self, my_color: chess::Color, depth: usize) -> Option<ChessMove> { 
+    fn generate_best_move(&mut self, my_color: chess::Color, depth: usize) -> Option<ChessMove> { 
         const MATE_VALUE: f32 = 1000000.0;
         
         /*
@@ -251,7 +259,7 @@ impl ChessEngine{
     best_move
 }
 
-    fn iterative_deepening_search(&self, time_limit: u128, max_depth: usize, my_color: chess::Color) -> Option<ChessMove>{
+    fn iterative_deepening_search(&mut self, time_limit: u128, max_depth: usize, my_color: chess::Color) -> Option<ChessMove>{
         
         
         let timer = std::time::Instant::now();
@@ -382,46 +390,7 @@ impl ChessEngine{
         return None;
     }
 
-    fn generate_slightly_smart_move(&self, my_color: chess::Color) -> Option<ChessMove>{
-        let movegen = MoveGen::new_legal(&self.board);
-        let moves: Vec<ChessMove> = movegen.collect();
-        
-        if moves.is_empty() {
-            return None;
-        }
-        
-        let mut move_heap: BinaryHeap<EvaluatedMove> = BinaryHeap::new();
-        
-        let num_moves = moves.len();
-        info!("evaluating {num_moves} moves at the top level");
-        for cm in moves{
-            info!("====================================================");
-            //let eval = evaluate(&self.board.make_move_new(cm),my_color);
-            info!("going into eval function for {cm}");
-            let nb = self.board.make_move_new(cm);
-            let mut alpha: f32 = f32::NEG_INFINITY;
-            let mut beta: f32 = f32::INFINITY;
-            let eval = self.evaluate_minimax(nb, 8, alpha,beta, my_color, false);
-
-            info!("move: {} evaluation: {}",cm,eval);
-            let em: EvaluatedMove = EvaluatedMove::new(cm,eval);
-            move_heap.push(em);
-        }
-        
-        let best_move: Option<&EvaluatedMove> = move_heap.peek();//this is a max heap
-        //since I have ensured that the heap will always have some element in it, why do I have to return an Option?
-        
-
-        let extracted_best_move: Option<ChessMove> = match best_move{
-            Some(em) => Some(em.chessmove),
-            None => None
-        };//feels like ther should be a better way to do this?
-        //let extracted_best_move: Option<ChessMove> = move_heap.peek().map(|em| em.chessmove);
-
-        return extracted_best_move;
-    }
-
-    fn calculate_think_time_ms(&self, go_command: &UCIGoCommand, my_color: chess::Color) -> i32{
+    fn calculate_think_time_ms(&mut self, go_command: &UCIGoCommand, my_color: chess::Color) -> i32{
         //go command is in ms        
         if let Some(movetime) = go_command.movetime{
             return movetime;
@@ -458,7 +427,7 @@ impl ChessEngine{
     }
 
 
-    fn generate_move(&self, _think_time_ms: i32, my_color: chess::Color) -> Option<ChessMove>{ 
+    fn generate_move(&mut self, _think_time_ms: i32, my_color: chess::Color) -> Option<ChessMove>{ 
         //let (eval,chessmove) = search::search_alpha_beta(self, self.board, 8, -100000.0, 100000.0, self.board.side_to_move(), true, None, None, 1000*60*100);
         let (eval,chessmove) = search::iterative_deepening_search(self, self.board, 12, _think_time_ms as u128, my_color, true);
         
@@ -466,8 +435,8 @@ impl ChessEngine{
         //return self.iterative_deepening_search(_think_time_ms as u128, 12, my_color)
     }
 
-    fn handle_go(&self, tokens: &[&str]) {
-
+    fn handle_go(&mut self, tokens: &[&str]) {
+        self.nodes_visited = 0;
         let my_color: chess::Color = self.board.side_to_move();
         let go_command: UCIGoCommand = UCIGoCommand::new(tokens);
 
@@ -486,6 +455,7 @@ impl ChessEngine{
 
     fn run(&mut self) {
         let stdin = io::stdin();
+        
         
 
 
@@ -517,6 +487,7 @@ fn main(){
     env_logger::Builder::from_default_env()
     .target(env_logger::Target::Stderr)
     .init();
+
 
     let mut engine = ChessEngine::new();
     engine.run();
