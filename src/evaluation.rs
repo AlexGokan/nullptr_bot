@@ -73,7 +73,7 @@ pub fn piece_square_table_evaluate(board: &Board, color: chess::Color) -> f32{
     -20,-10,-10, -5, -5,-10,-10,-20
     ];//moving these outside the function to static storage does nothing
     
-    info!("evaluating with piece square tables");
+    //info!("evaluating with piece square tables");
     
     let bb_my_pawns = (board.color_combined(color) & board.pieces(chess::Piece::Pawn)).to_size(0);
     let bb_my_knights = (board.color_combined(color) & board.pieces(chess::Piece::Knight)).to_size(0);
@@ -114,12 +114,12 @@ pub fn piece_square_table_evaluate(board: &Board, color: chess::Color) -> f32{
             (queen_table_value as i32) * (queen_bit_value as i32);
     }
 
-    info!("my total evaluation: {pst_score}");
+    //info!("my total evaluation: {pst_score}");
 
     let egp =early_game_probability(board);
     let pst_weight = 1.0 - egp;
-    info!("early game prob: {egp}");
-    info!("PST weight: {pst_weight}");
+    //info!("early game prob: {egp}");
+    //info!("PST weight: {pst_weight}");
 
     return (pst_score as f32) * pst_weight;
 }
@@ -189,9 +189,9 @@ pub fn evaluate_for_color(board: &Board, color: chess::Color) -> f32{
     //--------piece square table-----------------
     let pst_score =  (piece_square_table_evaluate(board, color) as f32) * 0.10;//not sure if .25 is an appropriate weight idk
     
-    info!("Piece val: {piece_val}");
-    info!("Control val: {control_score}");
-    info!("PST val: {pst_score}");
+    //info!("Piece val: {piece_val}");
+    //info!("Control val: {control_score}");
+    //info!("PST val: {pst_score}");
 
     return piece_val + control_score + pst_score;
 }

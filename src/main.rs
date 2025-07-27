@@ -13,13 +13,16 @@ use evaluation::evaluate;
 mod ucigocommand;
 use ucigocommand::UCIGoCommand;
 
+mod search;
+mod chessutil;
+
 
 
 use log::{debug,info,warn,error};
 
 use crate::evaluation::EvaluatedMove;
 
-struct ChessEngine{
+pub struct ChessEngine{
     board: Board,
 }
 
@@ -32,7 +35,7 @@ pub fn early_game_probability(board: &Board) -> f32{
     let bb_start_pawns_b = startpos_b & board.pieces(chess::Piece::Pawn) & board.color_combined(chess::Color::Black);
 
     let num_pcs_in_start = (bb_start_pawns_w.popcnt() + bb_start_pawns_b.popcnt()) as f32;
-    info!("{num_pcs_in_start} pieces in start");
+    //info!("{num_pcs_in_start} pieces in start");
 
     //when num_pcs is 16, it should be about 1
     //when num_pcs is < 13 or so, it should be about 0
@@ -134,56 +137,6 @@ impl ChessEngine{
     }
 
 
-    fn output_sorted_move_list(&self, board: chess::Board) -> Vec<ChessMove>{
-        let movegen = MoveGen::new_legal(&board);
-        
-        let (captures, quiet_moves): (Vec<ChessMove>, Vec<ChessMove>) = movegen
-            .partition(|m| board.piece_on(m.get_dest()).is_some());
-
-        let (pawn_caps,other_captures): (Vec<ChessMove>, Vec<ChessMove>) = 
-            captures.iter().partition(|m| {
-                board.piece_on(m.get_source()).expect("there should always be a piece at the source of a move") == chess::Piece::Pawn
-            });
-
-        let (knight_caps,other_captures): (Vec<ChessMove>, Vec<ChessMove>) = 
-            other_captures.iter().partition(|m| {
-                board.piece_on(m.get_source()).expect("there should always be a piece at the source of a move") == chess::Piece::Knight
-            });
-
-        let (bishop_caps,other_captures): (Vec<ChessMove>, Vec<ChessMove>) = 
-            other_captures.iter().partition(|m| {
-                board.piece_on(m.get_source()).expect("there should always be a piece at the source of a move") == chess::Piece::Bishop
-            });
-
-        let (rook_caps,other_captures): (Vec<ChessMove>, Vec<ChessMove>) = 
-            other_captures.iter().partition(|m| {
-                board.piece_on(m.get_source()).expect("there should always be a piece at the source of a move") == chess::Piece::Rook
-            });
-
-        let (queen_caps,other_captures): (Vec<ChessMove>, Vec<ChessMove>) = 
-            other_captures.iter().partition(|m| {
-                board.piece_on(m.get_source()).expect("there should always be a piece at the source of a move") == chess::Piece::Queen
-            });
-
-        let (king_caps,other_captures): (Vec<ChessMove>, Vec<ChessMove>) = 
-            other_captures.iter().partition(|m| {
-                board.piece_on(m.get_source()).expect("there should always be a piece at the source of a move") == chess::Piece::King
-            });
-        
-
-        let mut moves: Vec<ChessMove> = Vec::<ChessMove>::new();
-        moves.extend(pawn_caps);
-        moves.extend(knight_caps);
-        moves.extend(bishop_caps);
-        moves.extend(rook_caps);
-        moves.extend(queen_caps);
-        moves.extend(king_caps);
-        moves.extend(other_captures);//should be empty
-        moves.extend(quiet_moves);
-
-        return moves;
-    }
-
     fn evaluate_minimax(&self, board: chess::Board, depth: usize, mut alpha: f32, mut beta: f32, my_color: chess::Color, my_move: bool) -> f32 {
         const MATE_VALUE: f32 = 100000.0;  // Much larger than any position eval
         
@@ -192,7 +145,7 @@ impl ChessEngine{
         }
         
 
-        let moves: Vec<ChessMove> = self.output_sorted_move_list(board);
+        let moves: Vec<ChessMove> = chessutil::output_sorted_move_list(board);
 
 
         // Handle terminal positions (checkmate/stalemate)
@@ -258,7 +211,7 @@ impl ChessEngine{
         moves.extend(quiet_moves);
         */
 
-        let moves = self.output_sorted_move_list(self.board);
+        let moves = chessutil::output_sorted_move_list(self.board);
         
         if moves.is_empty() {
             return None;
@@ -319,7 +272,7 @@ impl ChessEngine{
                 info!("Depth {depth}: we have enough time!");
             }
 
-            let mut moves = self.output_sorted_move_list(self.board);
+            let mut moves = chessutil::output_sorted_move_list(self.board);
             let num_moves = moves.len();
             info!("{num_moves} moves");
             
@@ -391,6 +344,42 @@ impl ChessEngine{
 
         return best_move;
 
+    }
+
+    fn iterative_deepening_with_flexible_time(&self, base_time: u128, hard_time_limit: u128, max_depth: usize, my_color: chess::Color) ->Option<ChessMove>{
+        let timer = std::time::Instant::now();
+        let difficulty_mult: f32 = 1.0;
+        
+        /*
+        bestmove = None
+        bestscore = -INF
+        prev_best_move= None
+        score_history = []
+
+        for depth in 1..maxdepth[depth loop]
+            time_spent = timer.duration
+            if time_spent > hard_time_limit
+                break depth loop
+
+            current_score = search(position, depth, -INF, +INF)
+            
+            //-----difficulty assessment----
+            //best move instability
+
+            //score instability
+
+            //close alternatives
+
+            //other tactical indicators
+
+            //Time per depth analysis
+
+            //-------update parameters for next run
+
+        
+         */
+
+        return None;
     }
 
     fn generate_slightly_smart_move(&self, my_color: chess::Color) -> Option<ChessMove>{
@@ -470,9 +459,11 @@ impl ChessEngine{
 
 
     fn generate_move(&self, _think_time_ms: i32, my_color: chess::Color) -> Option<ChessMove>{ 
-        return self.iterative_deepening_search(_think_time_ms as u128, 12, my_color)
-       // return self.generate_best_move(my_color,8);
-
+        //let (eval,chessmove) = search::search_alpha_beta(self, self.board, 8, -100000.0, 100000.0, self.board.side_to_move(), true, None, None, 1000*60*100);
+        let (eval,chessmove) = search::iterative_deepening_search(self, self.board, 12, _think_time_ms as u128, my_color, true);
+        
+        return chessmove;
+        //return self.iterative_deepening_search(_think_time_ms as u128, 12, my_color)
     }
 
     fn handle_go(&self, tokens: &[&str]) {
@@ -483,14 +474,6 @@ impl ChessEngine{
         let think_time_ms: i32 = self.calculate_think_time_ms(&go_command, my_color);
         info!("think for {} ms",think_time_ms);
         
-        /*
-        //----for evaluating eval function below-------
-        let eval = evaluate(&self.board, my_color);
-        info!("Eval: {eval}");
-        
-        std::process::exit(0);
-        //-------end eval evaluation
-        */
 
         if let Some(best_move) = self.generate_move(think_time_ms, my_color) {
             println!("bestmove {}", best_move);
