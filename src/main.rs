@@ -65,9 +65,14 @@ impl ChessEngine{
         let search_depth = tokens[1].parse().unwrap();
 
         //let (eval,best_move) = search::iterative_deepening_search(think_time, search_depth, my_color);
-        let (eval,chessmove) = search::iterative_deepening_search(
-            self, self.board, search_depth, think_time, self.board.side_to_move(), true);
+        //let (eval,chessmove) = search::iterative_deepening_search(
+        //    self, self.board, search_depth, think_time, self.board.side_to_move(), true);
         
+        let (eval,chessmove) = search::iterative_deepening_search_with_time(
+            self, self.board, search_depth,
+            1.0, think_time,self.board.side_to_move(), true);
+        
+
         let elapsed = timer.elapsed().as_millis();
 
         println!("Bechmark for depth: {search_depth}");
@@ -380,16 +385,18 @@ impl ChessEngine{
             let increment = my_inc.unwrap_or(0);  
 
            
-            let egp = early_game_probability(&self.board);
+            //let egp = early_game_probability(&self.board);
 
             let proportion_of_game = 1.0/20.0;
             let time_value = ((base_time as f32)*proportion_of_game) as i32 + (increment/2);
 
+            /*
             if egp > 0.5{
                 let mut quick_time = increment + 1500;
                 quick_time = quick_time.min(3000);
                 return quick_time.min(time_value);//use min(3,inc+1.5) seconds, but less if we are in blitz
             }
+            */
             
             return time_value;
         }
@@ -398,7 +405,7 @@ impl ChessEngine{
 
     fn generate_move(&mut self, _think_time_ms: i32, my_color: chess::Color) -> Option<ChessMove>{ 
         //let (eval,chessmove) = search::search_alpha_beta(self, self.board, 8, -100000.0, 100000.0, self.board.side_to_move(), true, None, None, 1000*60*100);
-        let (eval,chessmove) = search::iterative_deepening_search(self, self.board, 12, _think_time_ms as u32, my_color, true);
+        let (eval,chessmove) = search::iterative_deepening_search_with_time(self, self.board, 12, 6.0, _think_time_ms as u32, my_color, true);
         
         return chessmove;
         //return self.iterative_deepening_search(_think_time_ms as u128, 12, my_color)
