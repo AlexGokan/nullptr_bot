@@ -429,7 +429,7 @@ impl ChessEngine{
 
     fn generate_move(&mut self, _think_time_ms: i32, my_color: chess::Color) -> Option<ChessMove>{ 
         //let (eval,chessmove) = search::search_alpha_beta(self, self.board, 8, -100000.0, 100000.0, self.board.side_to_move(), true, None, None, 1000*60*100);
-        let (eval,chessmove) = search::iterative_deepening_search(self, self.board, 12, _think_time_ms as u128, my_color, true);
+        let (eval,chessmove) = search::iterative_deepening_search(self, self.board, 12, _think_time_ms as u32, my_color, true);
         
         return chessmove;
         //return self.iterative_deepening_search(_think_time_ms as u128, 12, my_color)
