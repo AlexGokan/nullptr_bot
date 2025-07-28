@@ -75,11 +75,13 @@ pub fn piece_square_table_evaluate(board: &Board, color: chess::Color) -> f32{
     
     //info!("evaluating with piece square tables");
     
-    let bb_my_pawns = (board.color_combined(color) & board.pieces(chess::Piece::Pawn)).to_size(0);
-    let bb_my_knights = (board.color_combined(color) & board.pieces(chess::Piece::Knight)).to_size(0);
-    let bb_my_bishops = (board.color_combined(color) & board.pieces(chess::Piece::Bishop)).to_size(0);
-    let bb_my_rooks = (board.color_combined(color) & board.pieces(chess::Piece::Rook)).to_size(0);
-    let bb_my_queens = (board.color_combined(color) & board.pieces(chess::Piece::Queen)).to_size(0);
+    let bb_mine = board.color_combined(color);
+
+    let bb_my_pawns = (bb_mine & board.pieces(chess::Piece::Pawn)).to_size(0);
+    let bb_my_knights = (bb_mine & board.pieces(chess::Piece::Knight)).to_size(0);
+    let bb_my_bishops = (bb_mine & board.pieces(chess::Piece::Bishop)).to_size(0);
+    let bb_my_rooks = (bb_mine & board.pieces(chess::Piece::Rook)).to_size(0);
+    let bb_my_queens = (bb_mine & board.pieces(chess::Piece::Queen)).to_size(0);
     
     let mut pst_score: i32 = 0;
 
@@ -107,10 +109,10 @@ pub fn piece_square_table_evaluate(board: &Board, color: chess::Color) -> f32{
         let queen_table_value = PST_QUEEN[new_idx];
 
         pst_score += 
-            pawn_table_value * (pawn_bit_value as i32);
-            knight_table_value * (knight_bit_value as i32);
-            bishop_table_value * (bishop_bit_value as i32);
-            rook_table_value * (rook_bit_value as i32);
+            pawn_table_value * (pawn_bit_value as i32) +
+            knight_table_value * (knight_bit_value as i32) +
+            bishop_table_value * (bishop_bit_value as i32) +
+            rook_table_value * (rook_bit_value as i32) +
             queen_table_value * (queen_bit_value as i32);
     }
 
@@ -189,11 +191,28 @@ pub fn evaluate_for_color(board: &Board, color: chess::Color) -> f32{
     //--------piece square table-----------------
     let pst_score =  (piece_square_table_evaluate(board, color) as f32) * 0.10;//not sure if .25 is an appropriate weight idk
     
+
+    //-------doubled pawns----------------------
+    
+    let my_pawn_bb = bb_my_color.0 & board.pieces(chess::Piece::Pawn).0;
+    let mut doubled_penalty = 0.0;
+    if color == chess::Color::White{
+        let num_doubled_pawns = (my_pawn_bb & (my_pawn_bb << 8)).count_ones();
+        doubled_penalty = -0.4*(num_doubled_pawns as f32);
+
+    }else{
+        let num_doubled_pawns = (my_pawn_bb & (my_pawn_bb >> 8)).count_ones();
+        doubled_penalty = -0.4*(num_doubled_pawns as f32);
+    }
+
+
+
+
     //info!("Piece val: {piece_val}");
     //info!("Control val: {control_score}");
     //info!("PST val: {pst_score}");
 
-    return piece_val + control_score + pst_score;
+    return piece_val + control_score + pst_score + doubled_penalty;
 }
 
 

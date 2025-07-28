@@ -35,6 +35,13 @@ pub fn search_alpha_beta(engine: &mut ChessEngine, board: chess::Board, depth: u
     let num_moves = moves.len();
     //info!("{num_moves} moves!!!!!!");
 
+    //if this is a 3fold repetition return stalemate
+    //not sure the logic is right tho
+    let state_hash = engine.hasher.hash_board(&board);
+    if engine.hasher.check_table(state_hash) == 2{
+        return (0.0,None,true);
+    }
+
     if moves.is_empty(){
         match board.status(){
             BoardStatus::Stalemate => {

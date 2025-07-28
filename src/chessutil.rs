@@ -1,5 +1,10 @@
-use chess::{ChessMove, MoveGen};
+use chess::{Board, ChessMove, MoveGen};
 
+pub fn make_move_new(board: &Board, cm: ChessMove) -> chess::Board{
+    let mut b2 = board.clone();
+    board.make_move(cm, &mut b2);
+    return b2;
+}
 
 pub fn output_sorted_move_list(board: &chess::Board) -> Vec<ChessMove>{
     let movegen = MoveGen::new_legal(&board);

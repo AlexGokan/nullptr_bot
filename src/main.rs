@@ -6,6 +6,7 @@ use rand::Rng;
 use chess::{BitBoard, Board, BoardStatus, ChessMove, MoveGen, Rank, NUM_PIECES};
 use std::str::FromStr;
 use std::collections::BinaryHeap;
+use std::collections::HashMap;
 
 mod evaluation;
 use evaluation::evaluate;
@@ -16,14 +17,19 @@ use ucigocommand::UCIGoCommand;
 mod search;
 mod chessutil;
 
+mod zobristhasher;
+
 
 
 use log::{debug,info,warn,error};
+
+use crate::zobristhasher::ZobristHasher;
 
 
 pub struct ChessEngine{
     nodes_visited: u64,
     board: Board,
+    hasher: ZobristHasher,
 }
 
 
@@ -50,7 +56,8 @@ impl ChessEngine{
     fn new() -> Self{
         ChessEngine { 
             board: Board::default(),
-            nodes_visited: 0
+            nodes_visited: 0,
+            hasher: ZobristHasher::new(),
         }
     }
 
@@ -84,6 +91,18 @@ impl ChessEngine{
 
     }
 
+    fn handle_clearhash(&mut self){
+        self.hasher.gamestate_hashmap = HashMap::new();
+        println!("Cleared game-state hash map");
+        io::stdout().flush().unwrap();
+    }
+
+    fn handle_hashstatus(&mut self){
+        let hs: String = self.hasher.to_string();
+        print!("{hs}");
+        io::stdout().flush().unwrap();
+    }
+
     fn handle_evaluate(&mut self){
         let c = self.board.side_to_move();
         let eval = evaluate(&self.board, c);
@@ -112,6 +131,7 @@ impl ChessEngine{
         }
         if tokens[1] == "startpos"{
             self.board = Board::default();
+            self.hasher.insert_board(&self.board);
         }
         else if tokens[1] == "fen"{
             if tokens.len() < 8{
@@ -121,7 +141,10 @@ impl ChessEngine{
             let fen_str:String = fen_parts.join(" ");
 
             match Board::from_str(&fen_str){
-                Ok(board) => self.board = board,
+                Ok(board) => {
+                    self.board = board;
+                    self.hasher.insert_board(&board);
+                }
                 Err(_) => {
                     self.board = Board::default();
                 }
@@ -132,6 +155,7 @@ impl ChessEngine{
             for &move_str in &tokens[moves_index + 1..] {
                 if let Ok(chess_move) = ChessMove::from_str(move_str) {
                     self.board = self.board.make_move_new(chess_move);
+                    self.hasher.insert_board(&self.board);
                 }
             }
         }
@@ -387,7 +411,7 @@ impl ChessEngine{
            
             //let egp = early_game_probability(&self.board);
 
-            let proportion_of_game = 1.0/20.0;
+            let proportion_of_game = 1.0/12.0;
             let time_value = ((base_time as f32)*proportion_of_game) as i32 + (increment/2);
 
             /*
@@ -405,7 +429,7 @@ impl ChessEngine{
 
     fn generate_move(&mut self, _think_time_ms: i32, my_color: chess::Color) -> Option<ChessMove>{ 
         //let (eval,chessmove) = search::search_alpha_beta(self, self.board, 8, -100000.0, 100000.0, self.board.side_to_move(), true, None, None, 1000*60*100);
-        let (eval,chessmove) = search::iterative_deepening_search_with_time(self, self.board, 12, 6.0, _think_time_ms as u32, my_color, true);
+        let (eval,chessmove) = search::iterative_deepening_search_with_time(self, self.board, 12, 5.0, _think_time_ms as u32, my_color, true);
         
         return chessmove;
         //return self.iterative_deepening_search(_think_time_ms as u128, 12, my_color)
@@ -422,11 +446,13 @@ impl ChessEngine{
 
         if let Some(best_move) = self.generate_move(think_time_ms, my_color) {
             println!("bestmove {}", best_move);
+            
         } else {
             // No legal moves (checkmate or stalemate)
             println!("bestmove 0000");
         }
         io::stdout().flush().unwrap();
+        
     }
 
     fn run(&mut self) {
@@ -451,6 +477,8 @@ impl ChessEngine{
                 "go" => self.handle_go(&tokens),
                 "searchbenchmark" => self.handle_searchbenchmark(&tokens),
                 "evaluate" => self.handle_evaluate(),
+                "clearhash" => self.handle_clearhash(),
+                "hashstatus" => self.handle_hashstatus(),
                 "quit" => break,
                 _ => {} // Ignore unknown commands
             }
