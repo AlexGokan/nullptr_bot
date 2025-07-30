@@ -1,12 +1,14 @@
 
 
 use core::f32;
-use std::{io::{self,BufRead,Write}, result};
+use std::{fs, io::{self,BufRead,Write}, result};
 use rand::Rng;
 use chess::{BitBoard, Board, BoardStatus, ChessMove, MoveGen, Rank, NUM_PIECES};
 use std::str::FromStr;
 use std::collections::BinaryHeap;
 use std::collections::HashMap;
+use std::fs::{File};
+use std::io::Read;
 
 mod evaluation;
 use evaluation::evaluate;
@@ -16,6 +18,7 @@ use ucigocommand::UCIGoCommand;
 
 mod search;
 mod chessutil;
+use chessutil::BookEntry;
 
 mod zobristhasher;
 
@@ -30,6 +33,8 @@ pub struct ChessEngine{
     nodes_visited: u64,
     board: Board,
     hasher: ZobristHasher,
+    opening_book: HashMap<u64,Vec<BookEntry>>,
+    in_book: bool
 }
 
 
@@ -58,6 +63,8 @@ impl ChessEngine{
             board: Board::default(),
             nodes_visited: 0,
             hasher: ZobristHasher::new(),
+            opening_book: chessutil::load_book("C:/src/nullptr_bot/books/Titans.bin"),
+            in_book: true
         }
     }
 
@@ -71,9 +78,6 @@ impl ChessEngine{
 
         let search_depth = tokens[1].parse().unwrap();
 
-        //let (eval,best_move) = search::iterative_deepening_search(think_time, search_depth, my_color);
-        //let (eval,chessmove) = search::iterative_deepening_search(
-        //    self, self.board, search_depth, think_time, self.board.side_to_move(), true);
         
         let (eval,chessmove) = search::iterative_deepening_search_with_time(
             self, self.board, search_depth,
@@ -101,6 +105,20 @@ impl ChessEngine{
         let hs: String = self.hasher.to_string();
         print!("{hs}");
         io::stdout().flush().unwrap();
+    }
+
+    fn handle_hashme(&mut self){
+        let h = self.hasher.hash_board(&self.board);
+        println!("{:x}",h);
+        io::stdout().flush().unwrap();
+    }
+
+    fn handle_booktrue(&mut self){
+        self.in_book = true;
+    }
+
+    fn handle_bookfalse(&mut self){
+        self.in_book = false;
     }
 
     fn handle_evaluate(&mut self){
@@ -411,7 +429,7 @@ impl ChessEngine{
            
             //let egp = early_game_probability(&self.board);
 
-            let proportion_of_game = 1.0/12.0;
+            let proportion_of_game = 1.0/20.0;
             let time_value = ((base_time as f32)*proportion_of_game) as i32 + (increment/2);
 
             /*
@@ -427,8 +445,34 @@ impl ChessEngine{
     }
 
 
+    fn get_book_move(&mut self) -> Option<ChessMove>{
+        let h = self.hasher.hash_board(&self.board);
+        match self.opening_book.get(&h){
+            Some(v_be) => {
+                info!("Book move!");
+                info!("Weight: {}",v_be[0].weight);
+                return Some(v_be[0].chessmove);
+            }
+            None => {
+                self.in_book = false;
+                return None;
+            }
+        }
+
+
+        return None;
+    }
+
     fn generate_move(&mut self, _think_time_ms: i32, my_color: chess::Color) -> Option<ChessMove>{ 
-        //let (eval,chessmove) = search::search_alpha_beta(self, self.board, 8, -100000.0, 100000.0, self.board.side_to_move(), true, None, None, 1000*60*100);
+        if self.in_book{
+            match self.get_book_move(){
+                Some(cm) => {
+                    return Some(cm);
+                }
+                None => {}
+            }
+        }
+        
         let (eval,chessmove) = search::iterative_deepening_search_with_time(self, self.board, 12, 5.0, _think_time_ms as u32, my_color, true);
         
         return chessmove;
@@ -479,6 +523,9 @@ impl ChessEngine{
                 "evaluate" => self.handle_evaluate(),
                 "clearhash" => self.handle_clearhash(),
                 "hashstatus" => self.handle_hashstatus(),
+                "hashme" => self.handle_hashme(),
+                "booktrue" => self.handle_booktrue(),
+                "bookfalse" => self.handle_bookfalse(),
                 "quit" => break,
                 _ => {} // Ignore unknown commands
             }
@@ -494,5 +541,9 @@ fn main(){
 
 
     let mut engine = ChessEngine::new();
+
+
+
+
     engine.run();
 }
