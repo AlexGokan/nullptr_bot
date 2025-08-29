@@ -24,7 +24,7 @@ impl GametreeNode{
     }
 }
 
-pub fn mcts_selection(root: &mut GametreeNode) -> &GametreeNode{
+pub fn mcts_selection_expansion(root: &mut GametreeNode) -> &GametreeNode{
     /*
     select succesive child nodes until a leaf L is reached
     a leaf is any node that has a potential child (and?) from which no playout has been performed
@@ -49,15 +49,13 @@ pub fn mcts_selection(root: &mut GametreeNode) -> &GametreeNode{
         //pick one child from random from the list
         let rand_idx = rand::thread_rng().gen_range(0..root.children.len());
         
-        return mcts_selection(&mut root.children[rand_idx]);
+        return mcts_selection_expansion(&mut root.children[rand_idx]);
         
     }
 
 }
 
-pub fn mcts_expansion(){
 
-}
 
 pub fn mcts_simulation(){
 
@@ -71,7 +69,7 @@ pub fn pure_mcts_search(board: chess::Board, playout_depth: i32){
     let mut root = GametreeNode::new(board,None);
 
 
-    let selected_node: &GametreeNode = mcts_selection(&mut root);
+    let selected_node: &GametreeNode = mcts_selection_expansion(&mut root);
 }
 
 pub fn playout(board: chess::Board){
