@@ -19,6 +19,7 @@ use ucigocommand::UCIGoCommand;
 mod search;
 mod chessutil;
 use chessutil::BookEntry;
+mod mcts;
 
 mod zobristhasher;
 
@@ -26,7 +27,7 @@ mod zobristhasher;
 
 use log::{debug,info,warn,error};
 
-use crate::zobristhasher::ZobristHasher;
+use crate::{mcts::{playout, pure_mcts_search}, zobristhasher::ZobristHasher};
 
 
 pub struct ChessEngine{
@@ -38,24 +39,6 @@ pub struct ChessEngine{
 }
 
 
-pub fn early_game_probability(board: &Board) -> f32{
-    let startpos_w = chess::get_rank(Rank::First) | chess::get_rank(Rank::Second);
-    let startpos_b = chess::get_rank(Rank::Seventh) | chess::get_rank(Rank::Eighth);
-
-    let bb_start_pawns_w = startpos_w & board.pieces(chess::Piece::Pawn) & board.color_combined(chess::Color::White);
-    let bb_start_pawns_b = startpos_b & board.pieces(chess::Piece::Pawn) & board.color_combined(chess::Color::Black);
-
-    let num_pcs_in_start = (bb_start_pawns_w.popcnt() + bb_start_pawns_b.popcnt()) as f32;
-    //info!("{num_pcs_in_start} pieces in start");
-
-    //when num_pcs is 16, it should be about 1
-    //when num_pcs is < 13 or so, it should be about 0
-
-    let denom = 1.0+2.0_f32.powf(2.0*(num_pcs_in_start-10.0));
-    let prob = (-1.0/denom) + 1.0;
-
-    return prob as f32
-}
 
 impl ChessEngine{
     fn new() -> Self{
@@ -81,7 +64,7 @@ impl ChessEngine{
         
         let (eval,chessmove) = search::iterative_deepening_search_with_time(
             self, self.board, search_depth,
-            1.0, think_time,self.board.side_to_move(), true);
+            5.0, think_time,self.board.side_to_move(), true);
         
 
         let elapsed = timer.elapsed().as_millis();
@@ -177,6 +160,15 @@ impl ChessEngine{
                 }
             }
         }
+    }
+
+    fn handle_mctssearch(&mut self, tokens: &[&str]){
+        let playout_depth: i32 = tokens[1].parse().unwrap();
+        pure_mcts_search(self.board, playout_depth);
+    }
+
+    fn handle_playout(&mut self){
+        playout(self.board);
     }
 
     /*
@@ -432,13 +424,6 @@ impl ChessEngine{
             let proportion_of_game = 1.0/20.0;
             let time_value = ((base_time as f32)*proportion_of_game) as i32 + (increment/2);
 
-            /*
-            if egp > 0.5{
-                let mut quick_time = increment + 1500;
-                quick_time = quick_time.min(3000);
-                return quick_time.min(time_value);//use min(3,inc+1.5) seconds, but less if we are in blitz
-            }
-            */
             
             return time_value;
         }
@@ -526,6 +511,8 @@ impl ChessEngine{
                 "hashme" => self.handle_hashme(),
                 "booktrue" => self.handle_booktrue(),
                 "bookfalse" => self.handle_bookfalse(),
+                "playout" => self.handle_playout(),
+                "mctssearch" => self.handle_mctssearch(&tokens),
                 "quit" => break,
                 _ => {} // Ignore unknown commands
             }

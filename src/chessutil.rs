@@ -1,4 +1,4 @@
-use chess::{Board, ChessMove, MoveGen};
+use chess::{Board, ChessMove, MoveGen, Rank};
 use std::fs::{File};
 use std::io::Read;
 use std::fs;
@@ -60,6 +60,38 @@ pub fn output_sorted_move_list(board: &chess::Board) -> Vec<ChessMove>{
     moves.extend(quiet_moves);
 
     return moves;
+}
+
+pub fn early_game_probability(board: &Board) -> f32{
+    let startpos_w = chess::get_rank(Rank::First) | chess::get_rank(Rank::Second);
+    let startpos_b = chess::get_rank(Rank::Seventh) | chess::get_rank(Rank::Eighth);
+
+    let bb_start_pawns_w = startpos_w & board.pieces(chess::Piece::Pawn) & board.color_combined(chess::Color::White);
+    let bb_start_pawns_b = startpos_b & board.pieces(chess::Piece::Pawn) & board.color_combined(chess::Color::Black);
+
+    let num_pcs_in_start = (bb_start_pawns_w.popcnt() + bb_start_pawns_b.popcnt()) as f32;
+    //info!("{num_pcs_in_start} pieces in start");
+
+    //when num_pcs is 16, it should be about 1
+    //when num_pcs is < 13 or so, it should be about 0
+
+    let denom = 1.0+2.0_f32.powf(2.0*(num_pcs_in_start-10.0));
+    let prob = (-1.0/denom) + 1.0;
+
+    return prob as f32
+}
+
+pub fn end_game_probability(board: &Board) -> f32{
+    let bb_w = board.color_combined(chess::Color::White).popcnt();
+    let bb_b = board.color_combined(chess::Color::Black).popcnt();
+
+    let num_pcs = (bb_w + bb_b) as f32;
+    
+    let denom = 1.0 + 2_f32.powf(2.0 * (num_pcs-14.0));
+    let prob = 1.0/denom;
+
+    return prob;
+
 }
 
 
